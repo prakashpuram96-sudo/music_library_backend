@@ -1,20 +1,24 @@
-const Playlist = require("../models/Playlist");
+const playlistService = require("../services/playlistService");
+const createPlaylistDto = require("../dtos/createPlaylistDto");
 
 const createPlaylist = async (req, res) => {
-  const { name } = req.body;
+  const { errors, data } = createPlaylistDto(req.body);
+  if (errors.length > 0) return res.status(400).json({ message: errors[0] });
   try {
-    const playlist = await Playlist.create({ name, user: req.user._id });
+    const playlist = await playlistService.createPlaylist(
+      data.name,
+      req.user._id
+    );
     res.status(201).json(playlist);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
+// ... rest stays same as before
 const getMyPlaylists = async (req, res) => {
   try {
-    const playlists = await Playlist.find({ user: req.user._id }).populate(
-      "songs"
-    );
+    const playlists = await playlistService.getMyPlaylists(req.user._id);
     res.json(playlists);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -23,96 +27,88 @@ const getMyPlaylists = async (req, res) => {
 
 const getPlaylistById = async (req, res) => {
   try {
-    const playlist = await Playlist.findById(req.params.id).populate("songs");
-    if (!playlist)
-      return res.status(404).json({ message: "Playlist not found" });
-    if (playlist.user.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: "Not authorized" });
+    const playlist = await playlistService.getPlaylistById(
+      req.params.id,
+      req.user._id
+    );
     res.json(playlist);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const status = error.message === "Not authorized" ? 403 : 404;
+    res.status(status).json({ message: error.message });
   }
 };
 
 const updatePlaylist = async (req, res) => {
   try {
-    const playlist = await Playlist.findById(req.params.id);
-    if (!playlist)
-      return res.status(404).json({ message: "Playlist not found" });
-    if (playlist.user.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: "Not authorized" });
-    playlist.name = req.body.name || playlist.name;
-    await playlist.save();
-    const updated = await Playlist.findById(playlist._id).populate("songs");
-    res.json(updated);
+    const playlist = await playlistService.updatePlaylist(
+      req.params.id,
+      req.user._id,
+      req.body.name
+    );
+    res.json(playlist);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const status = error.message === "Not authorized" ? 403 : 404;
+    res.status(status).json({ message: error.message });
   }
 };
 
 const deletePlaylist = async (req, res) => {
   try {
-    const playlist = await Playlist.findById(req.params.id);
-    if (!playlist)
-      return res.status(404).json({ message: "Playlist not found" });
-    if (playlist.user.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: "Not authorized" });
-    await playlist.deleteOne();
-    res.json({ message: "Playlist deleted successfully" });
+    const result = await playlistService.deletePlaylist(
+      req.params.id,
+      req.user._id
+    );
+    res.json(result);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const status = error.message === "Not authorized" ? 403 : 404;
+    res.status(status).json({ message: error.message });
   }
 };
 
 const addSongToPlaylist = async (req, res) => {
   try {
-    const playlist = await Playlist.findById(req.params.id);
-    if (!playlist)
-      return res.status(404).json({ message: "Playlist not found" });
-    if (playlist.user.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: "Not authorized" });
-    if (playlist.songs.includes(req.params.songId))
-      return res.status(400).json({ message: "Song already in playlist" });
-    playlist.songs.push(req.params.songId);
-    await playlist.save();
-    const updated = await Playlist.findById(playlist._id).populate("songs");
-    res.json(updated);
+    const playlist = await playlistService.addSongToPlaylist(
+      req.params.id,
+      req.params.songId,
+      req.user._id
+    );
+    res.json(playlist);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const status =
+      error.message === "Not authorized"
+        ? 403
+        : error.message === "Song already in playlist"
+        ? 400
+        : 404;
+    res.status(status).json({ message: error.message });
   }
 };
 
 const removeSongFromPlaylist = async (req, res) => {
   try {
-    const playlist = await Playlist.findById(req.params.id);
-    if (!playlist)
-      return res.status(404).json({ message: "Playlist not found" });
-    if (playlist.user.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: "Not authorized" });
-    playlist.songs = playlist.songs.filter(
-      (song) => song.toString() !== req.params.songId
+    const playlist = await playlistService.removeSongFromPlaylist(
+      req.params.id,
+      req.params.songId,
+      req.user._id
     );
-    await playlist.save();
-    res.json(await playlist.populate("songs"));
+    res.json(playlist);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const status = error.message === "Not authorized" ? 403 : 404;
+    res.status(status).json({ message: error.message });
   }
 };
 
 const searchSongsInPlaylist = async (req, res) => {
-  const { query } = req.query;
   try {
-    const playlist = await Playlist.findById(req.params.id).populate("songs");
-    if (!playlist)
-      return res.status(404).json({ message: "Playlist not found" });
-    if (playlist.user.toString() !== req.user._id.toString())
-      return res.status(403).json({ message: "Not authorized" });
-    const filtered = playlist.songs.filter((song) =>
-      song.title.toLowerCase().includes(query.toLowerCase())
+    const songs = await playlistService.searchSongsInPlaylist(
+      req.params.id,
+      req.user._id,
+      req.query.query
     );
-    res.json(filtered);
+    res.json(songs);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const status = error.message === "Not authorized" ? 403 : 404;
+    res.status(status).json({ message: error.message });
   }
 };
 

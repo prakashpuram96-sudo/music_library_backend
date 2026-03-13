@@ -1,20 +1,11 @@
-const Song = require("../models/Song");
-const { createNotificationsForAllUsers } = require("./notificationController");
+const songService = require("../services/songService");
+const createSongDto = require("../dtos/createSongDto");
+
 const addSong = async (req, res) => {
-  const { title, singer, musicDirector, album, releaseDate, url, coverImage } =
-    req.body;
+  const { errors, data } = createSongDto(req.body);
+  if (errors.length > 0) return res.status(400).json({ message: errors[0] });
   try {
-    const song = await Song.create({
-      title,
-      singer,
-      musicDirector,
-      album,
-      releaseDate,
-      url,
-      coverImage,
-    });
-    // Create notifications for all users
-    await createNotificationsForAllUsers(song);
+    const song = await songService.addSong(data);
     res.status(201).json(song);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -23,8 +14,7 @@ const addSong = async (req, res) => {
 
 const getAllSongs = async (req, res) => {
   try {
-    const filter = req.user.role === "admin" ? {} : { isVisible: true };
-    const songs = await Song.find(filter).sort({ createdAt: -1 });
+    const songs = await songService.getAllSongs(req.user.role);
     res.json(songs);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -33,63 +23,43 @@ const getAllSongs = async (req, res) => {
 
 const getSongById = async (req, res) => {
   try {
-    const song = await Song.findById(req.params.id);
-    if (!song) return res.status(404).json({ message: "Song not found" });
+    const song = await songService.getSongById(req.params.id);
     res.json(song);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(404).json({ message: error.message });
   }
 };
 
 const updateSong = async (req, res) => {
   try {
-    const song = await Song.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    });
-    if (!song) return res.status(404).json({ message: "Song not found" });
+    const song = await songService.updateSong(req.params.id, req.body);
     res.json(song);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(404).json({ message: error.message });
   }
 };
 
 const deleteSong = async (req, res) => {
   try {
-    const song = await Song.findByIdAndDelete(req.params.id);
-    if (!song) return res.status(404).json({ message: "Song not found" });
-    res.json({ message: "Song deleted successfully" });
+    const result = await songService.deleteSong(req.params.id);
+    res.json(result);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(404).json({ message: error.message });
   }
 };
 
 const toggleVisibility = async (req, res) => {
   try {
-    const song = await Song.findById(req.params.id);
-    if (!song) return res.status(404).json({ message: "Song not found" });
-    song.isVisible = !song.isVisible;
-    await song.save();
-    res.json({
-      message: `Song is now ${song.isVisible ? "visible" : "hidden"}`,
-      song,
-    });
+    const result = await songService.toggleVisibility(req.params.id);
+    res.json(result);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(404).json({ message: error.message });
   }
 };
 
 const searchSongs = async (req, res) => {
-  const { query } = req.query;
   try {
-    const songs = await Song.find({
-      isVisible: true,
-      $or: [
-        { title: { $regex: query, $options: "i" } },
-        { singer: { $regex: query, $options: "i" } },
-        { musicDirector: { $regex: query, $options: "i" } },
-        { album: { $regex: query, $options: "i" } },
-      ],
-    });
+    const songs = await songService.searchSongs(req.query.query);
     res.json(songs);
   } catch (error) {
     res.status(500).json({ message: error.message });
